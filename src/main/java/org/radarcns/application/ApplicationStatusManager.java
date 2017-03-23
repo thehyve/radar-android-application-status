@@ -21,6 +21,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.util.Pair;
 
@@ -79,6 +80,9 @@ public class ApplicationStatusManager implements DeviceManager {
     private final List<Class<?>> serviceClasses;
 
     private final long creationTimeStamp;
+    private final SntpClient sntpClient;
+    private final String ntpServer;
+
     private boolean isRegistered = false;
     private InetAddress previousInetAddress;
 
@@ -97,11 +101,19 @@ public class ApplicationStatusManager implements DeviceManager {
         }
     };
 
-    public ApplicationStatusManager(Context context, ApplicationStatusService applicationStatusService, String groupId, String sourceId, TableDataHandler dataHandler, ApplicationStatusTopics topics, String devicesToConnect) {
+    public ApplicationStatusManager(Context context, ApplicationStatusService applicationStatusService, String groupId, String sourceId, TableDataHandler dataHandler, ApplicationStatusTopics topics, String devicesToConnect, String ntpServer) {
         this.dataHandler = dataHandler;
         this.serverStatusTable = dataHandler.getCache(topics.getServerTopic());
         this.uptimeTable = dataHandler.getCache(topics.getUptimeTopic());
         this.recordCountsTable = dataHandler.getCache(topics.getRecordCountsTopic());
+
+        sntpClient = new SntpClient();
+        if (ntpServer == null || ntpServer.trim().isEmpty()) {
+            this.ntpServer = null;
+        } else {
+            this.ntpServer = ntpServer.trim();
+        }
+
 
         this.applicationStatusService = applicationStatusService;
 
@@ -192,6 +204,17 @@ public class ApplicationStatusManager implements DeviceManager {
     @Override
     public String getName() {
         return deviceName;
+    }
+
+    public void processReferenceTime() {
+        if (ntpServer != null) {
+            if (sntpClient.requestTime(ntpServer, 5000)) {
+                double ntpTime =  (sntpClient.getNtpTime() + SystemClock.elapsedRealtime() - sntpClient.getNtpTimeReference()) / 1000d;
+                double receivedTime = System.currentTimeMillis() / 1000d;
+                new ApplicationTime(receivedTime, receivedTime, ntpTime, sntpClient.getRoundTripTime() / 1000d);
+            }
+        }
+
     }
 
     public void processServerStatus() {
