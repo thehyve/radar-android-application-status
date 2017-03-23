@@ -24,7 +24,6 @@ import android.os.RemoteException;
 import android.support.annotation.NonNull;
 import android.util.Pair;
 
-import org.radarcns.R;
 import org.radarcns.android.data.DataCache;
 import org.radarcns.android.data.TableDataHandler;
 import org.radarcns.android.device.BaseDeviceState;
