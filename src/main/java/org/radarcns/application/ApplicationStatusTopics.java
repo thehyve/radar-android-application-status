@@ -25,6 +25,7 @@ public class ApplicationStatusTopics extends DeviceTopics {
     private final AvroTopic<MeasurementKey, ApplicationServerStatus> serverTopic;
     private final AvroTopic<MeasurementKey, ApplicationRecordCounts> recordstopic;
     private final AvroTopic<MeasurementKey, ApplicationUptime> uptimetopic;
+    private final AvroTopic<MeasurementKey, ApplicationExternalTime> ntpTopic;
 
     private static final Object syncObject = new Object();
     private static ApplicationStatusTopics instance = null;
@@ -48,6 +49,9 @@ public class ApplicationStatusTopics extends DeviceTopics {
         uptimetopic = createTopic("application_uptime",
                 ApplicationUptime.getClassSchema(),
                 ApplicationUptime.class);
+        ntpTopic = createTopic("application_external_time",
+                ApplicationExternalTime.getClassSchema(),
+                ApplicationExternalTime.class);
     }
 
     public AvroTopic<MeasurementKey, ApplicationServerStatus> getServerTopic() {
@@ -62,4 +66,7 @@ public class ApplicationStatusTopics extends DeviceTopics {
         return uptimetopic;
     }
 
+    public AvroTopic<MeasurementKey, ApplicationExternalTime> getExternalTimeTopic() {
+        return ntpTopic;
+    }
 }

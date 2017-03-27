@@ -28,6 +28,8 @@ import java.util.List;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 
 public class ApplicationServiceProvider extends DeviceServiceProvider<ApplicationState> {
+    public static final String NTP_SERVER_CONFIG = "ntp_server";
+
     @Override
     public Class<?> getServiceClass() {
         return ApplicationStatusService.class;
@@ -51,7 +53,8 @@ public class ApplicationServiceProvider extends DeviceServiceProvider<Applicatio
     @Override
     protected void configure(Bundle bundle) {
         super.configure(bundle);
-        this.getConfig().putExtras(bundle, RadarConfiguration.DEVICE_SERVICES_TO_CONNECT);
+        this.getConfig().putExtras(bundle, RadarConfiguration.DEVICE_SERVICES_TO_CONNECT,
+                NTP_SERVER_CONFIG);
     }
 
     @Override

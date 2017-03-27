@@ -59,7 +59,7 @@ import static org.radarcns.android.device.DeviceService.SERVER_STATUS_CHANGED;
 
 public class ApplicationStatusManager implements DeviceManager {
     private static final Logger logger = LoggerFactory.getLogger(ApplicationStatusManager.class);
-    private static final long APPLICATION_UPDATE_INTERVAL_DEFAULT = 20; // seconds
+    private static final long APPLICATION_UPDATE_INTERVAL_DEFAULT = 300; // seconds
 
     private final TableDataHandler dataHandler;
     private final Context context;
@@ -68,6 +68,7 @@ public class ApplicationStatusManager implements DeviceManager {
 
     private final DataCache<MeasurementKey, ApplicationServerStatus> serverStatusTable;
     private final DataCache<MeasurementKey, ApplicationUptime> uptimeTable;
+    private final DataCache<MeasurementKey, ApplicationExternalTime> ntpTimeTable;
     private final DataCache<MeasurementKey, ApplicationRecordCounts> recordCountsTable;
 
     private final ApplicationState deviceStatus;
@@ -84,7 +85,6 @@ public class ApplicationStatusManager implements DeviceManager {
     private final String ntpServer;
 
     private boolean isRegistered = false;
-    private InetAddress previousInetAddress;
 
     private final BroadcastReceiver serverStatusListener = new BroadcastReceiver() {
         @Override
@@ -106,6 +106,7 @@ public class ApplicationStatusManager implements DeviceManager {
         this.serverStatusTable = dataHandler.getCache(topics.getServerTopic());
         this.uptimeTable = dataHandler.getCache(topics.getUptimeTopic());
         this.recordCountsTable = dataHandler.getCache(topics.getRecordCountsTopic());
+        this.ntpTimeTable = dataHandler.getCache(topics.getExternalTimeTopic());
 
         sntpClient = new SntpClient();
         if (ntpServer == null || ntpServer.trim().isEmpty()) {
@@ -144,7 +145,6 @@ public class ApplicationStatusManager implements DeviceManager {
 
         // Scheduler TODO: run executor with existing thread pool/factory
         executor = Executors.newSingleThreadScheduledExecutor();
-        previousInetAddress = null;
     }
 
     @Override
@@ -182,6 +182,7 @@ public class ApplicationStatusManager implements DeviceManager {
                     processServerStatus();
                     processUptime();
                     processRecordsSent();
+                    processReferenceTime();
                 } catch (Exception e) {
                     logger.error("Failed to update application status", e);
                 }
@@ -209,12 +210,16 @@ public class ApplicationStatusManager implements DeviceManager {
     public void processReferenceTime() {
         if (ntpServer != null) {
             if (sntpClient.requestTime(ntpServer, 5000)) {
-                double ntpTime =  (sntpClient.getNtpTime() + SystemClock.elapsedRealtime() - sntpClient.getNtpTimeReference()) / 1000d;
-                double receivedTime = System.currentTimeMillis() / 1000d;
-                new ApplicationTime(receivedTime, receivedTime, ntpTime, sntpClient.getRoundTripTime() / 1000d);
+                double delay = sntpClient.getRoundTripTime() / 1000d;
+                double time = System.currentTimeMillis() / 1000d;
+                double ntpTime =  (sntpClient.getNtpTime() + SystemClock.elapsedRealtime()
+                        - sntpClient.getNtpTimeReference()) / 1000d;
+                ApplicationExternalTime value = new ApplicationExternalTime(time, time, ntpTime,
+                        ntpServer, ExternalTimeProtocol.SNTP, delay);
+
+                dataHandler.addMeasurement(ntpTimeTable, deviceStatus.getId(), value);
             }
         }
-
     }
 
     public void processServerStatus() {
@@ -245,28 +250,26 @@ public class ApplicationStatusManager implements DeviceManager {
 
     private String getIpAddress() {
         // Find Ip via NetworkInterfaces. Works via wifi, ethernet and mobile network
+        InetAddress result = null;
         try {
-            if (previousInetAddress == null ||
-                    NetworkInterface.getByInetAddress(previousInetAddress) == null) {
-                for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements(); ) {
-                    NetworkInterface intf = en.nextElement();
-                    for (Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses(); enumIpAddr.hasMoreElements(); ) {
-                        InetAddress inetAddress = enumIpAddr.nextElement();
-                        if (!inetAddress.isLoopbackAddress() && !inetAddress.isLinkLocalAddress()) {
-                            // This finds both xx.xx.xx ip and rmnet. Last one is always ip.
-                            previousInetAddress = inetAddress;
-                        }
+            for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements(); ) {
+                NetworkInterface intf = en.nextElement();
+                for (Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses(); enumIpAddr.hasMoreElements(); ) {
+                    InetAddress inetAddress = enumIpAddr.nextElement();
+                    if (!inetAddress.isLoopbackAddress() && !inetAddress.isLinkLocalAddress()) {
+                        // This finds both xx.xx.xx ip and rmnet. Last one is always ip.
+                        result = inetAddress;
                     }
                 }
             }
         } catch (SocketException ex) {
             logger.warn("No IP Address could be determined", ex);
-            previousInetAddress = null;
+            result = null;
         }
-        if (previousInetAddress == null) {
-            return null;
+        if (result != null) {
+            return result.getHostAddress();
         } else {
-            return previousInetAddress.getHostAddress();
+            return null;
         }
     }
 
