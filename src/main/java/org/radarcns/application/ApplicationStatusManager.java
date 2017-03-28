@@ -108,12 +108,10 @@ public class ApplicationStatusManager implements DeviceManager {
         this.applicationStatusService = applicationStatusService;
 
         this.context = context;
-//        sensorManager = null;
         this.deviceStatus = new ApplicationState();
         this.deviceStatus.getId().setUserId(groupId);
         this.deviceStatus.getId().setSourceId(sourceId);
         deviceName = context.getString(R.string.app_name);
-//        updateStatus(DeviceStatusListener.Status.READY);
 
         serviceClasses = new ArrayList<>();
         Scanner sc = new Scanner(devicesToConnect);
