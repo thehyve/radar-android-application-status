@@ -89,7 +89,7 @@ public class ApplicationStatusService extends DeviceService {
             groupId = RadarConfiguration.getStringExtra(bundle, DEFAULT_GROUP_ID_KEY);
         }
         if (RadarConfiguration.hasExtra(bundle, DEVICE_SERVICES_TO_CONNECT)) {
-            String newDevicesToConnect = RadarConfiguration.getStringExtra(bundle, DEFAULT_GROUP_ID_KEY);
+            String newDevicesToConnect = RadarConfiguration.getStringExtra(bundle, DEVICE_SERVICES_TO_CONNECT);
             if (!Objects.equals(newDevicesToConnect, devicesToConnect)) {
                 doUpdate = true;
                 devicesToConnect = newDevicesToConnect;
