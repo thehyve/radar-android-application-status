@@ -23,6 +23,7 @@ import org.radarcns.android.RadarConfiguration;
 import org.radarcns.android.device.BaseDeviceState;
 import org.radarcns.android.device.DeviceManager;
 import org.radarcns.android.device.DeviceService;
+import org.radarcns.android.device.DeviceServiceBinder;
 import org.radarcns.android.device.DeviceStatusListener;
 import org.radarcns.android.device.DeviceTopics;
 import org.radarcns.android.util.PersistentStorage;
@@ -32,7 +33,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import static org.radarcns.android.RadarConfiguration.DEFAULT_GROUP_ID_KEY;
 import static org.radarcns.android.RadarConfiguration.DEVICE_SERVICES_TO_CONNECT;
@@ -79,11 +82,21 @@ public class ApplicationStatusService extends DeviceService {
     @Override
     protected void onInvocation(Bundle bundle) {
         super.onInvocation(bundle);
+        boolean doUpdate = false;
         if (RadarConfiguration.hasExtra(bundle, DEFAULT_GROUP_ID_KEY)) {
             groupId = RadarConfiguration.getStringExtra(bundle, DEFAULT_GROUP_ID_KEY);
         }
         if (RadarConfiguration.hasExtra(bundle, DEVICE_SERVICES_TO_CONNECT)) {
             devicesToConnect = RadarConfiguration.getStringExtra(bundle, DEFAULT_GROUP_ID_KEY);
+            String newDevicesToConnect = RadarConfiguration.getStringExtra(bundle, DEVICE_SERVICES_TO_CONNECT);
+            if (!Objects.equals(newDevicesToConnect, devicesToConnect)) {
+                doUpdate = true;
+                devicesToConnect = newDevicesToConnect;
+            }
+        }
+        if (getDeviceManager() != null && doUpdate) {
+            ((DeviceServiceBinder)getBinder()).stopRecording();
+            ((DeviceServiceBinder)getBinder()).startRecording(Collections.<String>emptySet());
         }
     }
 

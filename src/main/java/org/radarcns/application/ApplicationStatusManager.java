@@ -97,7 +97,9 @@ public class ApplicationStatusManager implements DeviceManager {
         }
     };
 
-    public ApplicationStatusManager(Context context, ApplicationStatusService applicationStatusService, String groupId, String sourceId, TableDataHandler dataHandler, ApplicationStatusTopics topics, String devicesToConnect) {
+    public ApplicationStatusManager(Context context,
+            ApplicationStatusService applicationStatusService, String groupId, String sourceId,
+            TableDataHandler dataHandler, ApplicationStatusTopics topics, String devicesToConnect) {
         this.dataHandler = dataHandler;
         this.serverStatusTable = dataHandler.getCache(topics.getServerTopic());
         this.uptimeTable = dataHandler.getCache(topics.getUptimeTopic());
