@@ -102,7 +102,7 @@ public class ApplicationStatusService extends DeviceService {
 
     public String getSourceId() {
         if (sourceId == null) {
-            sourceId = PersistentStorage.loadOrStoreUUID(getClass(), SOURCE_ID_KEY);
+            sourceId = new PersistentStorage(getClass()).loadOrStoreUUID(SOURCE_ID_KEY);
         }
         return sourceId;
     }

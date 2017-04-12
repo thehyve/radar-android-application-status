@@ -54,9 +54,13 @@ android {
 
 group = 'org.radarcns'
 ext.moduleName = 'radar-android-application-status'
-ext.githubUrl = 'https://github.com/RADAR-CNS/RADAR-Android-Application-Status.git'
 ext.moduleDescription = 'Application statistics plugin for RADAR passive remote monitoring app'
+ext.githubRepoName = 'RADAR-CNS/RADAR-Android-Application-Status'
 version = android.defaultConfig.versionName
+
+ext.githubUrl = 'https://github.com/' + githubRepoName + '.git'
+ext.issueUrl = 'https://github.com/' + githubRepoName + '/issues'
+ext.website = 'http://radar-cns.org'
 
 //---------------------------------------------------------------------------//
 // Sources and classpath configurations                                      //
@@ -67,17 +71,27 @@ repositories {
 }
 
 dependencies {
-    // needed to work with testCompile -> kafka-clients
     compile 'com.android.support:appcompat-v7:22.2.0'
-    compile 'org.radarcns:radar-commons-android:0.1-alpha.1'
+    compile 'org.radarcns:radar-commons-android:0.1'
+    compile 'org.radarcns:radar-schemas-commons:0.1'
 
     testCompile 'junit:junit:4.12'
     testCompile 'org.slf4j:slf4j-simple:1.7.21'
 }
 
+//---------------------------------------------------------------------------//
+// Build system metadata                                                     //
+//---------------------------------------------------------------------------//
+
+ext.sharedManifest = manifest {
+    attributes("Implementation-Title": moduleName,
+            "Implementation-Version": version)
+}
+
 task sourcesJar(type: Jar) {
-    from android.sourceSets.main.java.srcDirs
     classifier = 'sources'
+    from android.sourceSets.main.java.srcDirs
+    manifest.from sharedManifest
 }
 
 task javadoc(type: Javadoc) {
@@ -89,7 +103,10 @@ task javadoc(type: Javadoc) {
 task javadocJar(type: Jar, dependsOn: javadoc) {
     classifier = 'javadoc'
     from javadoc.destinationDir
+    manifest.from sharedManifest
 }
+
+// add javadoc/source jar tasks as artifacts
 artifacts {
     archives javadocJar
     archives sourcesJar
@@ -100,22 +117,41 @@ def pomConfig = {
         license {
             name "The Apache Software License, Version 2.0"
             url "http://www.apache.org/licenses/LICENSE-2.0.txt"
-            distribution "RADAR Android Application Status"
+            distribution 'repo'
         }
     }
     developers {
         developer {
-            id "radar-cns"
-            name "Joris Borgdorff"
-            email "joris@thehyve.nl"
+            id 'blootsvoets'
+            name 'Joris Borgdorff'
+            email 'joris@thehyve.nl'
+            organization 'The Hyve'
         }
+        developer {
+            id 'MaximMoinat'
+            name 'Maxim Moinat'
+            email 'maxim@thehyve.nl'
+            organization 'The Hyve'
+        }
+    }
+    issueManagement {
+        system 'GitHub'
+        url githubUrl + '/issues'
+    }
+    organization {
+        name 'RADAR-CNS'
+        url website
+    }
+    scm {
+        connection 'scm:git:' + githubUrl
+        url githubUrl
     }
 }
 
 install {
     repositories.mavenInstaller {
         pom.project {
-            group project.group
+            groupId project.group
             artifactId moduleName
             version project.version
         }
@@ -132,13 +168,19 @@ install {
 bintray {
     user = project.hasProperty('bintrayUser') ? project.property('bintrayUser') : System.getenv('BINTRAY_USER')
     key = project.hasProperty('bintrayApiKey') ? project.property('bintrayApiKey') : System.getenv('BINTRAY_API_KEY')
+    override = false
     configurations = ['archives']
     pkg {
         repo = project.group
         name = moduleName
         userOrg = 'radar-cns'
+        desc = moduleDescription
         licenses = ['Apache-2.0']
+        websiteUrl = website
+        issueTrackerUrl = issueUrl
         vcsUrl = githubUrl
+        githubRepo = githubRepoName
+        githubReleaseNotesFile = 'README.md'
         version {
             name = project.version
             desc = moduleDescription
