@@ -20,17 +20,13 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.os.RemoteException;
 import android.support.annotation.NonNull;
 import android.util.Pair;
 
 import org.radarcns.android.data.DataCache;
 import org.radarcns.android.data.TableDataHandler;
 import org.radarcns.android.device.BaseDeviceState;
-import org.radarcns.android.device.BaseServiceConnection;
 import org.radarcns.android.device.DeviceManager;
-import org.radarcns.android.device.DeviceServiceBinder;
-import org.radarcns.android.device.DeviceServiceProvider;
 import org.radarcns.android.device.DeviceStatusListener;
 import org.radarcns.android.kafka.ServerStatusListener;
 import org.radarcns.key.MeasurementKey;
@@ -41,17 +37,16 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
-import java.util.ArrayList;
 import java.util.Enumeration;
-import java.util.List;
-import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-import static android.content.Context.BIND_WAIVE_PRIORITY;
+import static org.radarcns.android.device.DeviceService.CACHE_TOPIC;
+import static org.radarcns.android.device.DeviceService.CACHE_RECORDS_SENT_NUMBER;
+import static org.radarcns.android.device.DeviceService.CACHE_RECORDS_UNSENT_NUMBER;
 import static org.radarcns.android.device.DeviceService.SERVER_RECORDS_SENT_NUMBER;
 import static org.radarcns.android.device.DeviceService.SERVER_RECORDS_SENT_TOPIC;
 import static org.radarcns.android.device.DeviceService.SERVER_STATUS_CHANGED;
@@ -59,6 +54,7 @@ import static org.radarcns.android.device.DeviceService.SERVER_STATUS_CHANGED;
 public class ApplicationStatusManager implements DeviceManager {
     private static final Logger logger = LoggerFactory.getLogger(ApplicationStatusManager.class);
     private static final long APPLICATION_UPDATE_INTERVAL_DEFAULT = 20; // seconds
+    private static final Long NUMBER_UNKNOWN = -1L;
 
     private final TableDataHandler dataHandler;
     private final Context context;
@@ -75,9 +71,6 @@ public class ApplicationStatusManager implements DeviceManager {
     private ScheduledFuture<?> serverStatusUpdateFuture;
     private final ScheduledExecutorService executor;
 
-    private final List<BaseServiceConnection<BaseDeviceState>> services;
-    private final List<Class<?>> serviceClasses;
-
     private final long creationTimeStamp;
     private boolean isRegistered = false;
     private InetAddress previousInetAddress;
@@ -93,6 +86,12 @@ public class ApplicationStatusManager implements DeviceManager {
                 if (numberOfRecordsSent != -1) {
                     deviceStatus.addRecordsSent(numberOfRecordsSent);
                 }
+            } else if (intent.getAction().equals(CACHE_TOPIC)) {
+                String topic = intent.getStringExtra(CACHE_TOPIC);
+                Pair<Long, Long> numberOfRecords = new Pair<>(
+                        intent.getLongExtra(CACHE_RECORDS_UNSENT_NUMBER, NUMBER_UNKNOWN),
+                        intent.getLongExtra(CACHE_RECORDS_SENT_NUMBER, NUMBER_UNKNOWN));
+                deviceStatus.putCachedRecords(topic, numberOfRecords);
             }
         }
     };
@@ -111,23 +110,8 @@ public class ApplicationStatusManager implements DeviceManager {
         this.deviceStatus = new ApplicationState();
         this.deviceStatus.getId().setUserId(groupId);
         this.deviceStatus.getId().setSourceId(sourceId);
-        deviceName = context.getString(R.string.app_name);
 
-        serviceClasses = new ArrayList<>();
-        Scanner sc = new Scanner(devicesToConnect);
-        while (sc.hasNext()) {
-            String providerName = sc.next();
-            if (providerName.charAt(0) == '.') {
-                providerName = "org.radarcns" + providerName;
-            }
-            try {
-                DeviceServiceProvider provider = (DeviceServiceProvider) Class.forName(providerName).newInstance();
-                serviceClasses.add(provider.getServiceClass());
-            } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | ClassCastException ex) {
-                logger.error("Cannot load provider {}", providerName, ex);
-            }
-        }
-        services = new ArrayList<>(serviceClasses.size());
+        deviceName = context.getString(R.string.app_name);
         creationTimeStamp = System.currentTimeMillis();
 
         // Scheduler TODO: run executor with existing thread pool/factory
@@ -138,16 +122,10 @@ public class ApplicationStatusManager implements DeviceManager {
     @Override
     public void start(@NonNull Set<String> acceptableIds) {
         logger.info("Starting ApplicationStatusManager");
-        for (Class clazz : serviceClasses) {
-            Intent serviceIntent = new Intent(context, clazz);
-            BaseServiceConnection<BaseDeviceState> conn = new BaseServiceConnection<>(BaseDeviceState.CREATOR, clazz.getName());
-            services.add(conn);
-            context.bindService(serviceIntent, conn, BIND_WAIVE_PRIORITY);
-        }
-
         IntentFilter filter = new IntentFilter();
         filter.addAction(SERVER_STATUS_CHANGED);
         filter.addAction(SERVER_RECORDS_SENT_TOPIC);
+        filter.addAction(CACHE_TOPIC);
         context.registerReceiver(serverStatusListener, filter);
 
         // Application status
@@ -259,26 +237,17 @@ public class ApplicationStatusManager implements DeviceManager {
     public void processRecordsSent() {
         double timeReceived = System.currentTimeMillis() / 1_000d;
 
-        Pair<Long, Long> localRecords = ((DeviceServiceBinder)applicationStatusService.getBinder()).numberOfRecords();
-        int recordsCachedUnsent = localRecords.first == -1L ? 0 : localRecords.first.intValue();
-        int recordsCachedSent = localRecords.second == -1L ? 0 : localRecords.second.intValue();
+        int recordsCachedUnsent = 0;
+        int recordsCachedSent = 0;
 
-        for (BaseServiceConnection<?> conn : services) {
-            if (conn.hasService()) {
-                try {
-                    Pair<Long, Long> numRecords = conn.numberOfRecords();
-                    if (numRecords.first != -1L) {
-                        recordsCachedUnsent += numRecords.first.intValue();
-                    }
-                    if (numRecords.second != -1L) {
-                        recordsCachedSent += numRecords.second.intValue();
-                    }
-                } catch (RemoteException e) {
-                    logger.warn("Failed to get server status from connection");
-                }
+        for (Pair<Long, Long> records : deviceStatus.getCachedRecords().values()) {
+            if (!records.first.equals(NUMBER_UNKNOWN)) {
+                recordsCachedUnsent += records.first.intValue();
+            }
+            if (!records.second.equals(NUMBER_UNKNOWN)) {
+                recordsCachedSent += records.second.intValue();
             }
         }
-
         int recordsCached = recordsCachedUnsent + recordsCachedSent;
         int recordsSent = deviceStatus.getRecordsSent();
 
@@ -294,9 +263,6 @@ public class ApplicationStatusManager implements DeviceManager {
         logger.info("Closing ApplicationStatusManager");
         executor.shutdown();
         context.unregisterReceiver(serverStatusListener);
-        for (BaseServiceConnection<BaseDeviceState> conn : services) {
-            context.unbindService(conn);
-        }
         isRegistered = false;
         updateStatus(DeviceStatusListener.Status.DISCONNECTED);
     }

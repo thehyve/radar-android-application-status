@@ -15,13 +15,13 @@ apply plugin: 'com.jfrog.bintray'
 apply plugin: 'com.github.dcendents.android-maven'
 
 android {
-    compileSdkVersion 22
-    buildToolsVersion "22.0.1"
+    compileSdkVersion 25
+    buildToolsVersion "25.0.3"
 
     defaultConfig {
-        minSdkVersion 19
-        targetSdkVersion 22
-        versionCode 3
+        minSdkVersion 21
+        targetSdkVersion 25
+        versionCode 4
         versionName '0.1.1-SNAPSHOT'
     }
     buildTypes {
@@ -67,13 +67,25 @@ ext.website = 'http://radar-cns.org'
 //---------------------------------------------------------------------------//
 
 repositories {
+    flatDir { dirs 'libs' }
     jcenter()
 }
 
 dependencies {
     compile 'com.android.support:appcompat-v7:22.2.0'
-    compile 'org.radarcns:radar-commons-android:0.1'
+    compile 'org.radarcns:radar-commons-android:0.1.1-SNAPSHOT@aar'
     compile 'org.radarcns:radar-schemas-commons:0.1'
+
+    //tmp
+    compile 'com.squareup.okhttp3:okhttp:3.6.0'
+    compile 'org.apache.avro:avro:1.8.1'
+    compile 'org.xerial.snappy:snappy-java:1.1.2.6'
+    compile 'com.google.firebase:firebase-config:10.0.1'
+    compile ('org.radarcns:radar-commons:0.2') {
+        exclude group: 'io.confluent', module: 'kafka-avro-serializer'
+        exclude group: 'org.apache.kafka', module: 'kafka-clients'
+        exclude group: 'com.fasterxml.jackson.dataformat', module: 'jackson-dataformat-yaml'
+    }
 
     testCompile 'junit:junit:4.12'
     testCompile 'org.slf4j:slf4j-simple:1.7.21'
