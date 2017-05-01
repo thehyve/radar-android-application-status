@@ -26,7 +26,6 @@ import org.radarcns.android.device.DeviceService;
 import org.radarcns.android.device.DeviceServiceBinder;
 import org.radarcns.android.device.DeviceStatusListener;
 import org.radarcns.android.device.DeviceTopics;
-import org.radarcns.android.util.PersistentStorage;
 import org.radarcns.key.MeasurementKey;
 import org.radarcns.topic.AvroTopic;
 import org.slf4j.Logger;
@@ -102,7 +101,7 @@ public class ApplicationStatusService extends DeviceService {
 
     public String getSourceId() {
         if (sourceId == null) {
-            sourceId = new PersistentStorage(getClass()).loadOrStoreUUID(SOURCE_ID_KEY);
+            sourceId = RadarConfiguration.getOrSetUUID(getApplicationContext(), SOURCE_ID_KEY);
         }
         return sourceId;
     }
