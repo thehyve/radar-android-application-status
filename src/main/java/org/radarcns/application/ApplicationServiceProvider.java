@@ -25,8 +25,6 @@ import org.radarcns.android.device.DeviceServiceProvider;
 import java.util.Collections;
 import java.util.List;
 
-import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
-
 public class ApplicationServiceProvider extends DeviceServiceProvider<ApplicationState> {
     @Override
     public Class<?> getServiceClass() {
@@ -45,7 +43,7 @@ public class ApplicationServiceProvider extends DeviceServiceProvider<Applicatio
 
     @Override
     public List<String> needsPermissions() {
-        return Collections.singletonList(WRITE_EXTERNAL_STORAGE);
+        return Collections.emptyList();
     }
 
     @Override
