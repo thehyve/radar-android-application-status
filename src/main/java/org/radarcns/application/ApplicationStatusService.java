@@ -21,7 +21,6 @@ import org.radarcns.android.RadarConfiguration;
 import org.radarcns.android.device.BaseDeviceState;
 import org.radarcns.android.device.DeviceManager;
 import org.radarcns.android.device.DeviceService;
-import org.radarcns.android.device.DeviceStatusListener;
 import org.radarcns.android.device.DeviceTopics;
 import org.radarcns.key.MeasurementKey;
 import org.radarcns.topic.AvroTopic;
@@ -53,9 +52,7 @@ public class ApplicationStatusService extends DeviceService {
 
     @Override
     protected BaseDeviceState getDefaultState() {
-        ApplicationState newStatus = new ApplicationState();
-        newStatus.setStatus(DeviceStatusListener.Status.DISCONNECTED);
-        return newStatus;
+        return new ApplicationState();
     }
 
     @Override

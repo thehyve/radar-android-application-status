@@ -111,7 +111,7 @@ public class ApplicationStatusManager implements DeviceManager {
         this.deviceStatus.getId().setUserId(groupId);
         this.deviceStatus.getId().setSourceId(sourceId);
 
-        deviceName = context.getString(R.string.app_name);
+        deviceName = context.getApplicationContext().getApplicationInfo().processName;
         creationTimeStamp = System.currentTimeMillis();
 
         // Scheduler TODO: run executor with existing thread pool/factory
