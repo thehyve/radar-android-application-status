@@ -20,28 +20,15 @@ import org.radarcns.android.RadarConfiguration;
 import org.radarcns.android.device.BaseDeviceState;
 import org.radarcns.android.device.DeviceManager;
 import org.radarcns.android.device.DeviceService;
-import org.radarcns.android.device.DeviceTopics;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.radarcns.android.RadarConfiguration.SOURCE_ID_KEY;
 
 public class ApplicationStatusService extends DeviceService {
-    private static final Logger logger = LoggerFactory.getLogger(ApplicationStatusService.class);
-    private ApplicationStatusTopics topics;
     private String sourceId;
 
     @Override
-    public void onCreate() {
-        logger.info("Creating Application Status service {}", this);
-        super.onCreate();
-
-        topics = ApplicationStatusTopics.getInstance();
-    }
-
-    @Override
     protected DeviceManager createDeviceManager() {
-        return new ApplicationStatusManager(this, getUserId(), getSourceId(), getDataHandler(), topics);
+        return new ApplicationStatusManager(this, getUserId(), getSourceId(), getDataHandler(), getTopics());
     }
 
     @Override
@@ -50,8 +37,8 @@ public class ApplicationStatusService extends DeviceService {
     }
 
     @Override
-    protected DeviceTopics getTopics() {
-        return topics;
+    protected ApplicationStatusTopics getTopics() {
+        return ApplicationStatusTopics.getInstance();
     }
 
     public String getSourceId() {
