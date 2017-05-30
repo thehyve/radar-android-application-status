@@ -16,19 +16,13 @@
 
 package org.radarcns.application;
 
-import org.apache.avro.specific.SpecificRecord;
 import org.radarcns.android.RadarConfiguration;
 import org.radarcns.android.device.BaseDeviceState;
 import org.radarcns.android.device.DeviceManager;
 import org.radarcns.android.device.DeviceService;
 import org.radarcns.android.device.DeviceTopics;
-import org.radarcns.key.MeasurementKey;
-import org.radarcns.topic.AvroTopic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Arrays;
-import java.util.List;
 
 import static org.radarcns.android.RadarConfiguration.SOURCE_ID_KEY;
 
@@ -47,7 +41,7 @@ public class ApplicationStatusService extends DeviceService {
 
     @Override
     protected DeviceManager createDeviceManager() {
-        return new ApplicationStatusManager(this, this, getUserId(), getSourceId(), getDataHandler(), topics);
+        return new ApplicationStatusManager(this, getUserId(), getSourceId(), getDataHandler(), topics);
     }
 
     @Override
@@ -58,12 +52,6 @@ public class ApplicationStatusService extends DeviceService {
     @Override
     protected DeviceTopics getTopics() {
         return topics;
-    }
-
-    @Override
-    protected List<AvroTopic<MeasurementKey, ? extends SpecificRecord>> getCachedTopics() {
-        return Arrays.<AvroTopic<MeasurementKey, ? extends SpecificRecord>>asList(
-                topics.getServerTopic(), topics.getRecordCountsTopic(), topics.getUptimeTopic());
     }
 
     public String getSourceId() {

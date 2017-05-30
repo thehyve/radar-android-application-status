@@ -25,8 +25,7 @@ import android.util.Pair;
 
 import org.radarcns.android.data.DataCache;
 import org.radarcns.android.data.TableDataHandler;
-import org.radarcns.android.device.BaseDeviceState;
-import org.radarcns.android.device.DeviceManager;
+import org.radarcns.android.device.AbstractDeviceManager;
 import org.radarcns.android.device.DeviceStatusListener;
 import org.radarcns.android.kafka.ServerStatusListener;
 import org.radarcns.key.MeasurementKey;
@@ -44,74 +43,59 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-import static org.radarcns.android.device.DeviceService.CACHE_TOPIC;
 import static org.radarcns.android.device.DeviceService.CACHE_RECORDS_SENT_NUMBER;
 import static org.radarcns.android.device.DeviceService.CACHE_RECORDS_UNSENT_NUMBER;
+import static org.radarcns.android.device.DeviceService.CACHE_TOPIC;
 import static org.radarcns.android.device.DeviceService.SERVER_RECORDS_SENT_NUMBER;
 import static org.radarcns.android.device.DeviceService.SERVER_RECORDS_SENT_TOPIC;
 import static org.radarcns.android.device.DeviceService.SERVER_STATUS_CHANGED;
 
-public class ApplicationStatusManager implements DeviceManager {
+public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationStatusService, ApplicationState> {
     private static final Logger logger = LoggerFactory.getLogger(ApplicationStatusManager.class);
     private static final long APPLICATION_UPDATE_INTERVAL_DEFAULT = 20; // seconds
     private static final Long NUMBER_UNKNOWN = -1L;
-
-    private final TableDataHandler dataHandler;
-    private final Context context;
-
-    private final ApplicationStatusService applicationStatusService;
 
     private final DataCache<MeasurementKey, ApplicationServerStatus> serverStatusTable;
     private final DataCache<MeasurementKey, ApplicationUptime> uptimeTable;
     private final DataCache<MeasurementKey, ApplicationRecordCounts> recordCountsTable;
 
-    private final ApplicationState deviceStatus;
-
-    private String deviceName;
     private ScheduledFuture<?> serverStatusUpdateFuture;
     private final ScheduledExecutorService executor;
 
     private final long creationTimeStamp;
-    private boolean isRegistered = false;
     private InetAddress previousInetAddress;
 
     private final BroadcastReceiver serverStatusListener = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equals(SERVER_STATUS_CHANGED)) {
-                final ServerStatusListener.Status status = ServerStatusListener.Status.values()[intent.getIntExtra(SERVER_STATUS_CHANGED, 0)];
-                deviceStatus.setServerStatus(status);
+                final ServerStatusListener.Status status = ServerStatusListener.Status.values()[
+                        intent.getIntExtra(SERVER_STATUS_CHANGED, 0)];
+                getState().setServerStatus(status);
             } else if (intent.getAction().equals(SERVER_RECORDS_SENT_TOPIC)) {
                 int numberOfRecordsSent = intent.getIntExtra(SERVER_RECORDS_SENT_NUMBER, 0);
                 if (numberOfRecordsSent != -1) {
-                    deviceStatus.addRecordsSent(numberOfRecordsSent);
+                    getState().addRecordsSent(numberOfRecordsSent);
                 }
             } else if (intent.getAction().equals(CACHE_TOPIC)) {
                 String topic = intent.getStringExtra(CACHE_TOPIC);
                 Pair<Long, Long> numberOfRecords = new Pair<>(
                         intent.getLongExtra(CACHE_RECORDS_UNSENT_NUMBER, NUMBER_UNKNOWN),
                         intent.getLongExtra(CACHE_RECORDS_SENT_NUMBER, NUMBER_UNKNOWN));
-                deviceStatus.putCachedRecords(topic, numberOfRecords);
+                getState().putCachedRecords(topic, numberOfRecords);
             }
         }
     };
 
-    public ApplicationStatusManager(Context context,
-            ApplicationStatusService applicationStatusService, String groupId, String sourceId,
-            TableDataHandler dataHandler, ApplicationStatusTopics topics) {
-        this.dataHandler = dataHandler;
+    public ApplicationStatusManager(ApplicationStatusService applicationStatusService,
+                                    String userId, String sourceId, TableDataHandler dataHandler,
+                                    ApplicationStatusTopics topics) {
+        super(applicationStatusService, new ApplicationState(), dataHandler, userId, sourceId);
         this.serverStatusTable = dataHandler.getCache(topics.getServerTopic());
         this.uptimeTable = dataHandler.getCache(topics.getUptimeTopic());
         this.recordCountsTable = dataHandler.getCache(topics.getRecordCountsTopic());
 
-        this.applicationStatusService = applicationStatusService;
-
-        this.context = context;
-        this.deviceStatus = new ApplicationState();
-        this.deviceStatus.getId().setUserId(groupId);
-        this.deviceStatus.getId().setSourceId(sourceId);
-
-        deviceName = context.getApplicationContext().getApplicationInfo().processName;
+        setName(getService().getApplicationContext().getApplicationInfo().processName);
         creationTimeStamp = System.currentTimeMillis();
 
         // Scheduler TODO: run executor with existing thread pool/factory
@@ -126,12 +110,11 @@ public class ApplicationStatusManager implements DeviceManager {
         filter.addAction(SERVER_STATUS_CHANGED);
         filter.addAction(SERVER_RECORDS_SENT_TOPIC);
         filter.addAction(CACHE_TOPIC);
-        context.registerReceiver(serverStatusListener, filter);
+        getService().registerReceiver(serverStatusListener, filter);
 
         // Application status
         setApplicationStatusUpdateRate(APPLICATION_UPDATE_INTERVAL_DEFAULT);
 
-        isRegistered = true;
         updateStatus(DeviceStatusListener.Status.CONNECTED);
     }
 
@@ -157,26 +140,11 @@ public class ApplicationStatusManager implements DeviceManager {
         logger.info("App status updater: listener activated and set to a period of {}", period);
     }
 
-    @Override
-    public boolean isClosed() {
-        return !isRegistered;
-    }
-
-    @Override
-    public BaseDeviceState getState() {
-        return deviceStatus;
-    }
-
-    @Override
-    public String getName() {
-        return deviceName;
-    }
-
     public void processServerStatus() {
         double timeReceived = System.currentTimeMillis() / 1_000d;
 
         ServerStatus status;
-        switch (deviceStatus.getServerStatus()) {
+        switch (getState().getServerStatus()) {
             case CONNECTED:
             case READY:
             case UPLOADING:
@@ -195,7 +163,7 @@ public class ApplicationStatusManager implements DeviceManager {
 
         ApplicationServerStatus value = new ApplicationServerStatus(timeReceived, timeReceived, status, ipAddress);
 
-        dataHandler.addMeasurement(serverStatusTable, deviceStatus.getId(), value);
+        send(serverStatusTable, value);
     }
 
     private String getIpAddress() {
@@ -231,7 +199,7 @@ public class ApplicationStatusManager implements DeviceManager {
         double uptime = (System.currentTimeMillis() - creationTimeStamp)/1000d;
         ApplicationUptime value = new ApplicationUptime(timeReceived, timeReceived, uptime);
 
-        dataHandler.addMeasurement(uptimeTable, deviceStatus.getId(), value);
+        send(uptimeTable, value);
     }
 
     public void processRecordsSent() {
@@ -240,7 +208,7 @@ public class ApplicationStatusManager implements DeviceManager {
         int recordsCachedUnsent = 0;
         int recordsCachedSent = 0;
 
-        for (Pair<Long, Long> records : deviceStatus.getCachedRecords().values()) {
+        for (Pair<Long, Long> records : getState().getCachedRecords().values()) {
             if (!records.first.equals(NUMBER_UNKNOWN)) {
                 recordsCachedUnsent += records.first.intValue();
             }
@@ -249,26 +217,20 @@ public class ApplicationStatusManager implements DeviceManager {
             }
         }
         int recordsCached = recordsCachedUnsent + recordsCachedSent;
-        int recordsSent = deviceStatus.getRecordsSent();
+        int recordsSent = getState().getRecordsSent();
 
         logger.info("Number of records: {sent: {}, unsent: {}, cached: {}}",
                 recordsSent, recordsCachedUnsent, recordsCached);
         ApplicationRecordCounts value = new ApplicationRecordCounts(timeReceived, timeReceived,
                 recordsCached, recordsSent, recordsCachedUnsent);
-        dataHandler.addMeasurement(recordCountsTable, deviceStatus.getId(), value);
+        send(recordCountsTable, value);
     }
 
     @Override
     public void close() throws IOException {
         logger.info("Closing ApplicationStatusManager");
         executor.shutdown();
-        context.unregisterReceiver(serverStatusListener);
-        isRegistered = false;
-        updateStatus(DeviceStatusListener.Status.DISCONNECTED);
-    }
-
-    private synchronized void updateStatus(DeviceStatusListener.Status status) {
-        this.deviceStatus.setStatus(status);
-        this.applicationStatusService.deviceStatusUpdated(this, status);
+        getService().unregisterReceiver(serverStatusListener);
+        super.close();
     }
 }
