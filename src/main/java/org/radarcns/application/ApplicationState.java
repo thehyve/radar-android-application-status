@@ -18,16 +18,20 @@ package org.radarcns.application;
 
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.util.Pair;
 
-import org.radarcns.android.device.DeviceStateCreator;
 import org.radarcns.android.device.BaseDeviceState;
+import org.radarcns.android.device.DeviceStateCreator;
 import org.radarcns.android.kafka.ServerStatusListener;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ApplicationState extends BaseDeviceState {
     private ServerStatusListener.Status serverStatus;
     private final AtomicInteger recordsSent = new AtomicInteger(0);
+    private final Map<String, Pair<Long, Long>> cachedRecords = new ConcurrentHashMap<>();
 
     public static final Parcelable.Creator<ApplicationState> CREATOR = new DeviceStateCreator<>(ApplicationState.class);
 
@@ -35,6 +39,11 @@ public class ApplicationState extends BaseDeviceState {
         super.updateFromParcel(in);
         serverStatus = ServerStatusListener.Status.values()[in.readInt()];
         recordsSent.set(in.readInt());
+        cachedRecords.clear();
+        int size = in.readInt();
+        for (int i = 0; i < size; i++) {
+            cachedRecords.put(in.readString(), new Pair<>(in.readLong(), in.readLong()));
+        }
     }
 
     @Override
@@ -42,6 +51,12 @@ public class ApplicationState extends BaseDeviceState {
         super.writeToParcel(dest, flags);
         dest.writeInt(getServerStatus().ordinal());
         dest.writeInt(getRecordsSent());
+        dest.writeInt(cachedRecords.size());
+        for (Map.Entry<String, Pair<Long, Long>> record : cachedRecords.entrySet()) {
+            dest.writeString(record.getKey());
+            dest.writeLong(record.getValue().first);
+            dest.writeLong(record.getValue().second);
+        }
     }
 
     public synchronized void setServerStatus(ServerStatusListener.Status status) {
@@ -50,6 +65,14 @@ public class ApplicationState extends BaseDeviceState {
 
     public void addRecordsSent(int nRecords) {
         recordsSent.addAndGet(nRecords);
+    }
+
+    public void putCachedRecords(String topic, Pair<Long, Long> numberOfRecords) {
+        cachedRecords.put(topic, numberOfRecords);
+    }
+
+    public Map<String, Pair<Long, Long>> getCachedRecords() {
+        return cachedRecords;
     }
 
     public synchronized ServerStatusListener.Status getServerStatus() {

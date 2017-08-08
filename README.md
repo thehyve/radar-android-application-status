@@ -12,11 +12,11 @@ repositories {
 }
 
 dependencies {
-    compile 'org.radarcns:radar-android-application-status:0.1-alpha.1'
+    compile 'org.radarcns:radar-android-application-status:0.1.1'
 }
 ```
 
-Set the `ntp_server` property in the configuration settings to synchronize with an external NTP server.
+Set the `ntp_server` property in the configuration settings to synchronize with an external NTP server. Set the `application_status_update_rate` (in seconds) to change the frequency of messages sent.
 
 ## Contributing
 

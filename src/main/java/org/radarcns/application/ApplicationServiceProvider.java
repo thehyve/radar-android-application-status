@@ -25,10 +25,13 @@ import org.radarcns.android.device.DeviceServiceProvider;
 import java.util.Collections;
 import java.util.List;
 
-import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
-
 public class ApplicationServiceProvider extends DeviceServiceProvider<ApplicationState> {
-    public static final String NTP_SERVER_CONFIG = "ntp_server";
+    private static final String PREFIX = ApplicationServiceProvider.class.getPackage().getName() + '.';
+    private static final String UPDATE_RATE = "application_status_update_rate";
+    private static final long UPDATE_RATE_DEFAULT = 300L; // seconds == 5 minutes
+    private static final String NTP_SERVER_CONFIG = "ntp_server";
+    public static final String UPDATE_RATE_KEY = PREFIX + UPDATE_RATE;
+    public static final String NTP_SERVER_KEY = PREFIX + NTP_SERVER_CONFIG;
 
     @Override
     public Class<?> getServiceClass() {
@@ -47,14 +50,15 @@ public class ApplicationServiceProvider extends DeviceServiceProvider<Applicatio
 
     @Override
     public List<String> needsPermissions() {
-        return Collections.singletonList(WRITE_EXTERNAL_STORAGE);
+        return Collections.emptyList();
     }
 
     @Override
     protected void configure(Bundle bundle) {
         super.configure(bundle);
-        this.getConfig().putExtras(bundle, RadarConfiguration.DEVICE_SERVICES_TO_CONNECT,
-                NTP_SERVER_CONFIG);
+        RadarConfiguration config = getConfig();
+        bundle.putLong(UPDATE_RATE_KEY, config.getLong(UPDATE_RATE, UPDATE_RATE_DEFAULT));
+        bundle.putString(NTP_SERVER_KEY, config.getString(NTP_SERVER_CONFIG, null));
     }
 
     @Override

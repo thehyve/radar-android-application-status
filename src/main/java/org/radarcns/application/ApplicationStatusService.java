@@ -17,101 +17,53 @@
 package org.radarcns.application;
 
 import android.os.Bundle;
-
-import org.apache.avro.specific.SpecificRecord;
 import org.radarcns.android.RadarConfiguration;
-import org.radarcns.android.device.BaseDeviceState;
 import org.radarcns.android.device.DeviceManager;
 import org.radarcns.android.device.DeviceService;
-import org.radarcns.android.device.DeviceServiceBinder;
-import org.radarcns.android.device.DeviceStatusListener;
-import org.radarcns.android.device.DeviceTopics;
-import org.radarcns.android.util.PersistentStorage;
-import org.radarcns.key.MeasurementKey;
-import org.radarcns.topic.AvroTopic;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
-
-import static org.radarcns.android.RadarConfiguration.DEFAULT_GROUP_ID_KEY;
-import static org.radarcns.android.RadarConfiguration.DEVICE_SERVICES_TO_CONNECT;
 import static org.radarcns.android.RadarConfiguration.SOURCE_ID_KEY;
-import static org.radarcns.application.ApplicationServiceProvider.NTP_SERVER_CONFIG;
+import static org.radarcns.application.ApplicationServiceProvider.NTP_SERVER_KEY;
+import static org.radarcns.application.ApplicationServiceProvider.UPDATE_RATE_KEY;
 
 public class ApplicationStatusService extends DeviceService {
-    private static final Logger logger = LoggerFactory.getLogger(ApplicationStatusService.class);
-    private ApplicationStatusTopics topics;
-    private String groupId;
+    private final ApplicationStatusTopics topics;
     private String sourceId;
-    private String devicesToConnect;
     private String ntpServer;
+    private long updateRate;
 
-    @Override
-    public void onCreate() {
-        logger.info("Creating Application Status service {}", this);
-        super.onCreate();
-
+    public ApplicationStatusService() {
         topics = ApplicationStatusTopics.getInstance();
     }
 
     @Override
     protected DeviceManager createDeviceManager() {
-        return new ApplicationStatusManager(this, this, groupId, getSourceId(), getDataHandler(), topics, devicesToConnect, ntpServer);
+        if (sourceId == null) {
+            sourceId = RadarConfiguration.getOrSetUUID(getApplicationContext(), SOURCE_ID_KEY);
+        }
+        return new ApplicationStatusManager(
+                this, getUserId(), sourceId, getDataHandler(), getTopics(),
+                ntpServer, updateRate);
     }
 
     @Override
-    protected BaseDeviceState getDefaultState() {
-        ApplicationState newStatus = new ApplicationState();
-        newStatus.setStatus(DeviceStatusListener.Status.DISCONNECTED);
-        return newStatus;
+    protected ApplicationState getDefaultState() {
+        return new ApplicationState();
     }
 
     @Override
-    protected DeviceTopics getTopics() {
+    protected ApplicationStatusTopics getTopics() {
         return topics;
-    }
-
-    @Override
-    protected List<AvroTopic<MeasurementKey, ? extends SpecificRecord>> getCachedTopics() {
-        return Arrays.<AvroTopic<MeasurementKey, ? extends SpecificRecord>>asList(
-                topics.getServerTopic(), topics.getRecordCountsTopic(), topics.getUptimeTopic());
     }
 
     @Override
     protected void onInvocation(Bundle bundle) {
         super.onInvocation(bundle);
-        boolean doUpdate = false;
-        if (RadarConfiguration.hasExtra(bundle, DEFAULT_GROUP_ID_KEY)) {
-            groupId = RadarConfiguration.getStringExtra(bundle, DEFAULT_GROUP_ID_KEY);
+        updateRate = bundle.getLong(UPDATE_RATE_KEY) * 1000L;
+        ntpServer = bundle.getString(NTP_SERVER_KEY);
+        ApplicationStatusManager manager = (ApplicationStatusManager)getDeviceManager();
+        if (manager != null) {
+            manager.setApplicationStatusUpdateRate(updateRate);
+            manager.setNtpServer(ntpServer);
         }
-        if (RadarConfiguration.hasExtra(bundle, DEVICE_SERVICES_TO_CONNECT)) {
-            String newDevicesToConnect = RadarConfiguration.getStringExtra(bundle, DEVICE_SERVICES_TO_CONNECT);
-            if (!Objects.equals(newDevicesToConnect, devicesToConnect)) {
-                doUpdate = true;
-                devicesToConnect = newDevicesToConnect;
-            }
-        }
-        if (RadarConfiguration.hasExtra(bundle, NTP_SERVER_CONFIG)) {
-            String newNtpServer = RadarConfiguration.getStringExtra(bundle, NTP_SERVER_CONFIG);
-            if (!Objects.equals(newNtpServer, ntpServer)) {
-                ntpServer = newNtpServer;
-                doUpdate = true;
-            }
-        }
-        if (getDeviceManager() != null && doUpdate) {
-            ((DeviceServiceBinder)getBinder()).stopRecording();
-            ((DeviceServiceBinder)getBinder()).startRecording(Collections.<String>emptySet());
-        }
-    }
-
-    public String getSourceId() {
-        if (sourceId == null) {
-            sourceId = PersistentStorage.loadOrStoreUUID(getClass(), SOURCE_ID_KEY);
-        }
-        return sourceId;
     }
 }
