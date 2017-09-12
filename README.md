@@ -16,7 +16,7 @@ dependencies {
 }
 ```
 
-Set the `ntp_server` property in the configuration settings to synchronize with an external NTP server.
+Set the `ntp_server` property in the configuration settings to synchronize with an external NTP server. Set the `application_status_update_rate` (in seconds) to change the frequency of messages sent.
 
 ## Contributing
 
