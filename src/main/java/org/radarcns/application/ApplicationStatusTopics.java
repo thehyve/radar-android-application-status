@@ -17,14 +17,17 @@
 package org.radarcns.application;
 
 import org.radarcns.android.device.DeviceTopics;
-import org.radarcns.key.MeasurementKey;
+import org.radarcns.kafka.ObservationKey;
+import org.radarcns.monitor.application.ApplicationRecordCounts;
+import org.radarcns.monitor.application.ApplicationServerStatus;
+import org.radarcns.monitor.application.ApplicationUptime;
 import org.radarcns.topic.AvroTopic;
 
 public class ApplicationStatusTopics extends DeviceTopics {
 
-    private final AvroTopic<MeasurementKey, ApplicationServerStatus> serverTopic;
-    private final AvroTopic<MeasurementKey, ApplicationRecordCounts> recordstopic;
-    private final AvroTopic<MeasurementKey, ApplicationUptime> uptimetopic;
+    private final AvroTopic<ObservationKey, ApplicationServerStatus> serverTopic;
+    private final AvroTopic<ObservationKey, ApplicationRecordCounts> recordstopic;
+    private final AvroTopic<ObservationKey, ApplicationUptime> uptimetopic;
 
     private static final Object syncObject = new Object();
     private static ApplicationStatusTopics instance = null;
@@ -50,15 +53,15 @@ public class ApplicationStatusTopics extends DeviceTopics {
                 ApplicationUptime.class);
     }
 
-    public AvroTopic<MeasurementKey, ApplicationServerStatus> getServerTopic() {
+    public AvroTopic<ObservationKey, ApplicationServerStatus> getServerTopic() {
         return serverTopic;
     }
 
-    public AvroTopic<MeasurementKey, ApplicationRecordCounts> getRecordCountsTopic() {
+    public AvroTopic<ObservationKey, ApplicationRecordCounts> getRecordCountsTopic() {
         return recordstopic;
     }
 
-    public AvroTopic<MeasurementKey, ApplicationUptime> getUptimeTopic() {
+    public AvroTopic<ObservationKey, ApplicationUptime> getUptimeTopic() {
         return uptimetopic;
     }
 

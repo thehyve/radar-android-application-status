@@ -22,14 +22,17 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.support.annotation.NonNull;
 import android.util.Pair;
 import org.radarcns.android.data.DataCache;
 import org.radarcns.android.data.TableDataHandler;
 import org.radarcns.android.device.AbstractDeviceManager;
 import org.radarcns.android.device.DeviceStatusListener;
 import org.radarcns.android.kafka.ServerStatusListener;
-import org.radarcns.key.MeasurementKey;
+import org.radarcns.kafka.ObservationKey;
+import org.radarcns.monitor.application.ApplicationRecordCounts;
+import org.radarcns.monitor.application.ApplicationServerStatus;
+import org.radarcns.monitor.application.ApplicationUptime;
+import org.radarcns.monitor.application.ServerStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,9 +57,9 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
     private static final long APPLICATION_UPDATE_INTERVAL_DEFAULT = 300_000L; // milliseconds
     private static final Long NUMBER_UNKNOWN = -1L;
 
-    private final DataCache<MeasurementKey, ApplicationServerStatus> serverStatusTable;
-    private final DataCache<MeasurementKey, ApplicationUptime> uptimeTable;
-    private final DataCache<MeasurementKey, ApplicationRecordCounts> recordCountsTable;
+    private final DataCache<ObservationKey, ApplicationServerStatus> serverStatusTable;
+    private final DataCache<ObservationKey, ApplicationUptime> uptimeTable;
+    private final DataCache<ObservationKey, ApplicationRecordCounts> recordCountsTable;
     private final HandlerThread mHandlerThread;
 
     private final long creationTimeStamp;
@@ -105,7 +108,7 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
     }
 
     @Override
-    public void start(@NonNull Set<String> acceptableIds) {
+    public void start(Set<String> acceptableIds) {
         mHandlerThread.start();
         synchronized (this) {
             mHandler = new Handler(mHandlerThread.getLooper());
@@ -163,7 +166,7 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
     }
 
     public void processServerStatus() {
-        double timeReceived = System.currentTimeMillis() / 1_000d;
+        double time = System.currentTimeMillis() / 1_000d;
 
         ServerStatus status;
         switch (getState().getServerStatus()) {
@@ -183,7 +186,7 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
         String ipAddress = getIpAddress();
         logger.info("Server Status: {}; Device IP: {}", status, ipAddress);
 
-        ApplicationServerStatus value = new ApplicationServerStatus(timeReceived, timeReceived, status, ipAddress);
+        ApplicationServerStatus value = new ApplicationServerStatus(time, status, ipAddress);
 
         send(serverStatusTable, value);
     }
@@ -216,13 +219,13 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
     }
 
     public void processUptime() {
-        double timeReceived = System.currentTimeMillis() / 1_000d;
+        double time = System.currentTimeMillis() / 1_000d;
         double uptime = (System.currentTimeMillis() - creationTimeStamp)/1000d;
-        send(uptimeTable, new ApplicationUptime(timeReceived, timeReceived, uptime));
+        send(uptimeTable, new ApplicationUptime(time, uptime));
     }
 
     public void processRecordsSent() {
-        double timeReceived = System.currentTimeMillis() / 1_000d;
+        double time = System.currentTimeMillis() / 1_000d;
 
         int recordsCachedUnsent = 0;
         int recordsCachedSent = 0;
@@ -240,7 +243,7 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
 
         logger.info("Number of records: {sent: {}, unsent: {}, cached: {}}",
                 recordsSent, recordsCachedUnsent, recordsCached);
-        send(recordCountsTable, new ApplicationRecordCounts(timeReceived, timeReceived,
+        send(recordCountsTable, new ApplicationRecordCounts(time,
                 recordsCached, recordsSent, recordsCachedUnsent));
     }
 
