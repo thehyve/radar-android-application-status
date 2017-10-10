@@ -20,14 +20,13 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.os.Handler;
-import android.os.HandlerThread;
+import android.support.annotation.NonNull;
 import android.util.Pair;
 import org.radarcns.android.data.DataCache;
-import org.radarcns.android.data.TableDataHandler;
 import org.radarcns.android.device.AbstractDeviceManager;
 import org.radarcns.android.device.DeviceStatusListener;
 import org.radarcns.android.kafka.ServerStatusListener;
+import org.radarcns.android.util.OfflineProcessor;
 import org.radarcns.kafka.ObservationKey;
 import org.radarcns.monitor.application.ApplicationRecordCounts;
 import org.radarcns.monitor.application.ApplicationServerStatus;
@@ -43,7 +42,6 @@ import java.net.SocketException;
 import java.util.Enumeration;
 import java.util.Set;
 
-import static android.os.Process.THREAD_PRIORITY_BACKGROUND;
 import static org.radarcns.android.device.DeviceService.CACHE_RECORDS_SENT_NUMBER;
 import static org.radarcns.android.device.DeviceService.CACHE_RECORDS_UNSENT_NUMBER;
 import static org.radarcns.android.device.DeviceService.CACHE_TOPIC;
@@ -51,21 +49,22 @@ import static org.radarcns.android.device.DeviceService.SERVER_RECORDS_SENT_NUMB
 import static org.radarcns.android.device.DeviceService.SERVER_RECORDS_SENT_TOPIC;
 import static org.radarcns.android.device.DeviceService.SERVER_STATUS_CHANGED;
 
-public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationStatusService,
-        ApplicationState> implements Runnable {
+public class ApplicationStatusManager
+        extends AbstractDeviceManager<ApplicationStatusService, ApplicationState>
+        implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(ApplicationStatusManager.class);
     private static final long APPLICATION_UPDATE_INTERVAL_DEFAULT = 300_000L; // milliseconds
     private static final Long NUMBER_UNKNOWN = -1L;
+    private static final int APPLICATION_PROCESSOR_REQUEST_CODE = 72553575;
+    private static final String APPLICATION_PROCESSOR_REQUEST_NAME = ApplicationStatusManager.class.getName();
 
     private final DataCache<ObservationKey, ApplicationServerStatus> serverStatusTable;
     private final DataCache<ObservationKey, ApplicationUptime> uptimeTable;
     private final DataCache<ObservationKey, ApplicationRecordCounts> recordCountsTable;
-    private final HandlerThread mHandlerThread;
 
+    private final OfflineProcessor processor;
     private final long creationTimeStamp;
     private InetAddress previousInetAddress;
-    private long updateRate;
-    private Handler mHandler;
 
     private final BroadcastReceiver serverStatusListener = new BroadcastReceiver() {
         @Override
@@ -89,30 +88,26 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
         }
     };
 
-    public ApplicationStatusManager(ApplicationStatusService applicationStatusService,
-                                    String userId, String sourceId, TableDataHandler dataHandler,
-                                    ApplicationStatusTopics topics) {
-        super(applicationStatusService, new ApplicationState(), dataHandler, userId, sourceId);
-        this.serverStatusTable = dataHandler.getCache(topics.getServerTopic());
-        this.uptimeTable = dataHandler.getCache(topics.getUptimeTopic());
-        this.recordCountsTable = dataHandler.getCache(topics.getRecordCountsTopic());
+    public ApplicationStatusManager(ApplicationStatusService service) {
+        super(service);
+        ApplicationStatusTopics topics = service.getTopics();
+        this.serverStatusTable = getCache(topics.getServerTopic());
+        this.uptimeTable = getCache(topics.getUptimeTopic());
+        this.recordCountsTable = getCache(topics.getRecordCountsTopic());
+        this.processor = new OfflineProcessor(service, this, APPLICATION_PROCESSOR_REQUEST_CODE,
+                APPLICATION_PROCESSOR_REQUEST_NAME, APPLICATION_UPDATE_INTERVAL_DEFAULT, false);
 
         setName(getService().getApplicationContext().getApplicationInfo().processName);
+
         creationTimeStamp = System.currentTimeMillis();
-
-        mHandlerThread = new HandlerThread("ApplicationStatus",
-                THREAD_PRIORITY_BACKGROUND);
-
         previousInetAddress = null;
-        updateRate = APPLICATION_UPDATE_INTERVAL_DEFAULT;
     }
 
     @Override
-    public void start(Set<String> acceptableIds) {
-        mHandlerThread.start();
-        synchronized (this) {
-            mHandler = new Handler(mHandlerThread.getLooper());
-        }
+    public void start(@NonNull Set<String> acceptableIds) {
+        updateStatus(DeviceStatusListener.Status.READY);
+
+        this.processor.start();
 
         logger.info("Starting ApplicationStatusManager");
         IntentFilter filter = new IntentFilter();
@@ -121,48 +116,29 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
         filter.addAction(CACHE_TOPIC);
         getService().registerReceiver(serverStatusListener, filter);
 
-        schedule();
-
         updateStatus(DeviceStatusListener.Status.CONNECTED);
-    }
-
-    private synchronized void schedule() {
-        if (mHandler == null) {
-            return;
-        }
-        mHandler.removeCallbacks(this);
-        mHandler.postDelayed(this, updateRate / 3);
-        logger.info("App status updater: listener activated and set to a period of {}", updateRate);
     }
 
     @Override
     public void run() {
-        synchronized (this) {
-            if (mHandler == null) {
-                return;
-            }
-        }
         logger.info("Updating application status");
         try {
             processServerStatus();
+            if (processor.isDone()) {
+                return;
+            }
             processUptime();
+            if (processor.isDone()) {
+                return;
+            }
             processRecordsSent();
         } catch (Exception e) {
             logger.error("Failed to update application status", e);
         }
-        synchronized (this) {
-            if (mHandler != null) {
-                mHandler.postDelayed(this, updateRate);
-            }
-        }
     }
 
-    public final synchronized void setApplicationStatusUpdateRate(final long period) {
-        if (period == updateRate) {
-            return;
-        }
-        updateRate = period;
-        schedule();
+    public void setApplicationStatusUpdateRate(long period) {
+        processor.setInterval(period);
     }
 
     public void processServerStatus() {
@@ -250,10 +226,7 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
     @Override
     public void close() throws IOException {
         logger.info("Closing ApplicationStatusManager");
-        synchronized (this) {
-            mHandler = null;
-        }
-        mHandlerThread.quitSafely();
+        this.processor.close();
         getService().unregisterReceiver(serverStatusListener);
         super.close();
     }

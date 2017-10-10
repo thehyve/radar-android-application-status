@@ -19,6 +19,7 @@ package org.radarcns.application;
 import android.os.Bundle;
 import android.os.Parcelable;
 
+import android.support.annotation.NonNull;
 import org.radarcns.android.RadarConfiguration;
 import org.radarcns.android.device.DeviceServiceProvider;
 
@@ -33,11 +34,6 @@ public class ApplicationServiceProvider extends DeviceServiceProvider<Applicatio
     @Override
     public Class<?> getServiceClass() {
         return ApplicationStatusService.class;
-    }
-
-    @Override
-    public Parcelable.Creator<ApplicationState> getStateCreator() {
-        return ApplicationState.CREATOR;
     }
 
     @Override
@@ -61,5 +57,23 @@ public class ApplicationServiceProvider extends DeviceServiceProvider<Applicatio
     @Override
     public String getDisplayName() {
         return getActivity().getString(R.string.applicationServiceDisplayName);
+    }
+
+    @Override
+    @NonNull
+    public String getDeviceProducer() {
+        return "RADAR";
+    }
+
+    @Override
+    @NonNull
+    public String getDeviceModel() {
+        return "pRMT";
+    }
+
+    @Override
+    @NonNull
+    public String getVersion() {
+        return BuildConfig.VERSION_NAME;
     }
 }

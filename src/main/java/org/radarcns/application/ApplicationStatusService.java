@@ -17,24 +17,17 @@
 package org.radarcns.application;
 
 import android.os.Bundle;
-import org.radarcns.android.RadarConfiguration;
 import org.radarcns.android.device.DeviceManager;
 import org.radarcns.android.device.DeviceService;
 
-import static org.radarcns.android.RadarConfiguration.SOURCE_ID_KEY;
 import static org.radarcns.application.ApplicationServiceProvider.UPDATE_RATE_KEY;
 
-public class ApplicationStatusService extends DeviceService {
-    private String sourceId;
+public class ApplicationStatusService extends DeviceService<ApplicationState> {
     private long updateRate;
 
     @Override
-    protected DeviceManager createDeviceManager() {
-        if (sourceId == null) {
-            sourceId = RadarConfiguration.getOrSetUUID(getApplicationContext(), SOURCE_ID_KEY);
-        }
-        ApplicationStatusManager manager = new ApplicationStatusManager(
-                this, getUserId(), sourceId, getDataHandler(), getTopics());
+    protected ApplicationStatusManager createDeviceManager() {
+        ApplicationStatusManager manager = new ApplicationStatusManager(this);
         manager.setApplicationStatusUpdateRate(updateRate);
         return manager;
     }
