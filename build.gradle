@@ -4,7 +4,7 @@ buildscript {
         jcenter()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:2.2.3'
+        classpath 'com.android.tools.build:gradle:2.3.0'
         classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.7.3'
         classpath 'com.github.dcendents:android-maven-gradle-plugin:1.5'
     }
@@ -16,7 +16,7 @@ apply plugin: 'com.github.dcendents.android-maven'
 
 android {
     compileSdkVersion 25
-    buildToolsVersion "25.0.3"
+    buildToolsVersion "26.0.1"
 
     defaultConfig {
         minSdkVersion 21
@@ -55,7 +55,7 @@ android {
 group = 'org.radarcns'
 ext.moduleName = 'radar-android-application-status'
 ext.moduleDescription = 'Application statistics plugin for RADAR passive remote monitoring app'
-ext.githubRepoName = 'RADAR-CNS/RADAR-Android-Application-Status'
+ext.githubRepoName = 'RADAR-CNS/radar-android-application-status'
 version = android.defaultConfig.versionName
 
 ext.githubUrl = 'https://github.com/' + githubRepoName + '.git'
@@ -117,7 +117,7 @@ artifacts {
     archives sourcesJar
 }
 
-def pomConfig = {
+ext.pomConfig = {
     licenses {
         license {
             name "The Apache Software License, Version 2.0"
@@ -199,6 +199,6 @@ bintray {
 }
 
 task wrapper(type: Wrapper) {
-    gradleVersion = '3.4.1'
-    distributionUrl distributionUrl.replace("bin", "all")
+    gradleVersion = '4.1'
+    distributionType 'all'
 }
