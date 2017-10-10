@@ -31,6 +31,12 @@ public class ApplicationServiceProvider extends DeviceServiceProvider<Applicatio
     private static final String UPDATE_RATE = "application_status_update_rate";
     public static final String UPDATE_RATE_KEY = PREFIX + UPDATE_RATE;
 
+
+    @Override
+    public String getDescription() {
+        return getActivity().getString(R.string.application_status_description);
+    }
+
     @Override
     public Class<?> getServiceClass() {
         return ApplicationStatusService.class;
