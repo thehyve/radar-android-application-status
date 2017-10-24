@@ -38,11 +38,6 @@ public class ApplicationStatusService extends DeviceService<ApplicationState> {
     }
 
     @Override
-    protected ApplicationStatusTopics getTopics() {
-        return ApplicationStatusTopics.getInstance();
-    }
-
-    @Override
     protected void onInvocation(Bundle bundle) {
         super.onInvocation(bundle);
         updateRate = bundle.getLong(UPDATE_RATE_KEY) * 1000L;

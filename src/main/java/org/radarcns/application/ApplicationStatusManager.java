@@ -22,7 +22,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.support.annotation.NonNull;
 import android.util.Pair;
-import org.radarcns.android.data.DataCache;
 import org.radarcns.android.device.AbstractDeviceManager;
 import org.radarcns.android.device.DeviceStatusListener;
 import org.radarcns.android.kafka.ServerStatusListener;
@@ -32,6 +31,7 @@ import org.radarcns.monitor.application.ApplicationRecordCounts;
 import org.radarcns.monitor.application.ApplicationServerStatus;
 import org.radarcns.monitor.application.ApplicationUptime;
 import org.radarcns.monitor.application.ServerStatus;
+import org.radarcns.topic.AvroTopic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,9 +58,9 @@ public class ApplicationStatusManager
     private static final int APPLICATION_PROCESSOR_REQUEST_CODE = 72553575;
     private static final String APPLICATION_PROCESSOR_REQUEST_NAME = ApplicationStatusManager.class.getName();
 
-    private final DataCache<ObservationKey, ApplicationServerStatus> serverStatusTable;
-    private final DataCache<ObservationKey, ApplicationUptime> uptimeTable;
-    private final DataCache<ObservationKey, ApplicationRecordCounts> recordCountsTable;
+    private final AvroTopic<ObservationKey, ApplicationServerStatus> serverTopic;
+    private final AvroTopic<ObservationKey, ApplicationRecordCounts> recordCountsTopic;
+    private final AvroTopic<ObservationKey, ApplicationUptime> uptimeTopic;
 
     private final OfflineProcessor processor;
     private final long creationTimeStamp;
@@ -90,10 +90,11 @@ public class ApplicationStatusManager
 
     public ApplicationStatusManager(ApplicationStatusService service) {
         super(service);
-        ApplicationStatusTopics topics = service.getTopics();
-        this.serverStatusTable = getCache(topics.getServerTopic());
-        this.uptimeTable = getCache(topics.getUptimeTopic());
-        this.recordCountsTable = getCache(topics.getRecordCountsTopic());
+
+        serverTopic = createTopic("application_server_status", ApplicationServerStatus.class);
+        recordCountsTopic = createTopic("application_record_counts", ApplicationRecordCounts.class);
+        uptimeTopic = createTopic("application_uptime", ApplicationUptime.class);
+
         this.processor = new OfflineProcessor(service, this, APPLICATION_PROCESSOR_REQUEST_CODE,
                 APPLICATION_PROCESSOR_REQUEST_NAME, APPLICATION_UPDATE_INTERVAL_DEFAULT, false);
 
@@ -164,7 +165,7 @@ public class ApplicationStatusManager
 
         ApplicationServerStatus value = new ApplicationServerStatus(time, status, ipAddress);
 
-        send(serverStatusTable, value);
+        send(serverTopic, value);
     }
 
     private String getIpAddress() {
@@ -197,7 +198,7 @@ public class ApplicationStatusManager
     public void processUptime() {
         double time = System.currentTimeMillis() / 1_000d;
         double uptime = (System.currentTimeMillis() - creationTimeStamp)/1000d;
-        send(uptimeTable, new ApplicationUptime(time, uptime));
+        send(uptimeTopic, new ApplicationUptime(time, uptime));
     }
 
     public void processRecordsSent() {
@@ -219,7 +220,7 @@ public class ApplicationStatusManager
 
         logger.info("Number of records: {sent: {}, unsent: {}, cached: {}}",
                 recordsSent, recordsCachedUnsent, recordsCached);
-        send(recordCountsTable, new ApplicationRecordCounts(time,
+        send(recordCountsTopic, new ApplicationRecordCounts(time,
                 recordsCached, recordsSent, recordsCachedUnsent));
     }
 

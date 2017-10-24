@@ -34,7 +34,7 @@ public class ApplicationServiceProvider extends DeviceServiceProvider<Applicatio
 
     @Override
     public String getDescription() {
-        return getActivity().getString(R.string.application_status_description);
+        return getRadarService().getString(R.string.application_status_description);
     }
 
     @Override
@@ -62,7 +62,7 @@ public class ApplicationServiceProvider extends DeviceServiceProvider<Applicatio
 
     @Override
     public String getDisplayName() {
-        return getActivity().getString(R.string.applicationServiceDisplayName);
+        return getRadarService().getString(R.string.applicationServiceDisplayName);
     }
 
     @Override
