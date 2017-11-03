@@ -19,6 +19,7 @@ package org.radarcns.application;
 import android.os.Bundle;
 import android.os.Parcelable;
 
+import android.support.annotation.NonNull;
 import org.radarcns.android.RadarConfiguration;
 import org.radarcns.android.device.DeviceServiceProvider;
 
@@ -26,14 +27,19 @@ import java.util.Collections;
 import java.util.List;
 
 public class ApplicationServiceProvider extends DeviceServiceProvider<ApplicationState> {
+    private static final String PREFIX = ApplicationServiceProvider.class.getPackage().getName() + '.';
+    private static final String UPDATE_RATE = "application_status_update_rate";
+    public static final String UPDATE_RATE_KEY = PREFIX + UPDATE_RATE;
+
+
     @Override
-    public Class<?> getServiceClass() {
-        return ApplicationStatusService.class;
+    public String getDescription() {
+        return getRadarService().getString(R.string.application_status_description);
     }
 
     @Override
-    public Parcelable.Creator<ApplicationState> getStateCreator() {
-        return ApplicationState.CREATOR;
+    public Class<?> getServiceClass() {
+        return ApplicationStatusService.class;
     }
 
     @Override
@@ -49,11 +55,31 @@ public class ApplicationServiceProvider extends DeviceServiceProvider<Applicatio
     @Override
     protected void configure(Bundle bundle) {
         super.configure(bundle);
+        RadarConfiguration config = getConfig();
+        bundle.putLong(UPDATE_RATE_KEY, config.getLong(UPDATE_RATE, 300L));
         this.getConfig().putExtras(bundle, RadarConfiguration.DEVICE_SERVICES_TO_CONNECT);
     }
 
     @Override
     public String getDisplayName() {
-        return getActivity().getString(R.string.applicationServiceDisplayName);
+        return getRadarService().getString(R.string.applicationServiceDisplayName);
+    }
+
+    @Override
+    @NonNull
+    public String getDeviceProducer() {
+        return "RADAR";
+    }
+
+    @Override
+    @NonNull
+    public String getDeviceModel() {
+        return "pRMT";
+    }
+
+    @Override
+    @NonNull
+    public String getVersion() {
+        return BuildConfig.VERSION_NAME;
     }
 }

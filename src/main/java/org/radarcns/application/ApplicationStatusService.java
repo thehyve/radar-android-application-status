@@ -16,35 +16,34 @@
 
 package org.radarcns.application;
 
-import org.radarcns.android.RadarConfiguration;
-import org.radarcns.android.device.BaseDeviceState;
+import android.os.Bundle;
 import org.radarcns.android.device.DeviceManager;
 import org.radarcns.android.device.DeviceService;
 
-import static org.radarcns.android.RadarConfiguration.SOURCE_ID_KEY;
+import static org.radarcns.application.ApplicationServiceProvider.UPDATE_RATE_KEY;
 
-public class ApplicationStatusService extends DeviceService {
-    private String sourceId;
+public class ApplicationStatusService extends DeviceService<ApplicationState> {
+    private long updateRate;
 
     @Override
-    protected DeviceManager createDeviceManager() {
-        return new ApplicationStatusManager(this, getUserId(), getSourceId(), getDataHandler(), getTopics());
+    protected ApplicationStatusManager createDeviceManager() {
+        ApplicationStatusManager manager = new ApplicationStatusManager(this);
+        manager.setApplicationStatusUpdateRate(updateRate);
+        return manager;
     }
 
     @Override
-    protected BaseDeviceState getDefaultState() {
+    protected ApplicationState getDefaultState() {
         return new ApplicationState();
     }
 
     @Override
-    protected ApplicationStatusTopics getTopics() {
-        return ApplicationStatusTopics.getInstance();
-    }
-
-    public String getSourceId() {
-        if (sourceId == null) {
-            sourceId = RadarConfiguration.getOrSetUUID(getApplicationContext(), SOURCE_ID_KEY);
+    protected void onInvocation(Bundle bundle) {
+        super.onInvocation(bundle);
+        updateRate = bundle.getLong(UPDATE_RATE_KEY) * 1000L;
+        DeviceManager manager = getDeviceManager();
+        if (manager != null) {
+            ((ApplicationStatusManager)manager).setApplicationStatusUpdateRate(updateRate);
         }
-        return sourceId;
     }
 }
