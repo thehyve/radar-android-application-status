@@ -20,6 +20,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.util.Pair;
 import org.radarcns.android.device.AbstractDeviceManager;
@@ -57,10 +58,12 @@ public class ApplicationStatusManager
     private final AvroTopic<ObservationKey, ApplicationServerStatus> serverTopic;
     private final AvroTopic<ObservationKey, ApplicationRecordCounts> recordCountsTopic;
     private final AvroTopic<ObservationKey, ApplicationUptime> uptimeTopic;
+    private final AvroTopic<ObservationKey, ApplicationExternalTime> ntpTopic;
 
     private final OfflineProcessor processor;
     private final long creationTimeStamp;
     private final SntpClient sntpClient;
+
     private String ntpServer;
 
     private InetAddress previousInetAddress;
@@ -168,7 +171,7 @@ public class ApplicationStatusManager
                 double ntpTime =  (sntpClient.getNtpTime() + SystemClock.elapsedRealtime()
                         - sntpClient.getNtpTimeReference()) / 1000d;
 
-                send(ntpTimeTopic, new ApplicationExternalTime(time, time, ntpTime,
+                send(ntpTopic, new ApplicationExternalTime(time, ntpTime,
                         localServer, ExternalTimeProtocol.SNTP, delay));
             }
         }
