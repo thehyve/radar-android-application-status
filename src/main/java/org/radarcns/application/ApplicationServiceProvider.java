@@ -29,7 +29,10 @@ import java.util.List;
 public class ApplicationServiceProvider extends DeviceServiceProvider<ApplicationState> {
     private static final String PREFIX = ApplicationServiceProvider.class.getPackage().getName() + '.';
     private static final String UPDATE_RATE = "application_status_update_rate";
+    private static final long UPDATE_RATE_DEFAULT = 300L; // seconds == 5 minutes
+    private static final String NTP_SERVER_CONFIG = "ntp_server";
     public static final String UPDATE_RATE_KEY = PREFIX + UPDATE_RATE;
+    public static final String NTP_SERVER_KEY = PREFIX + NTP_SERVER_CONFIG;
 
 
     @Override
@@ -56,8 +59,8 @@ public class ApplicationServiceProvider extends DeviceServiceProvider<Applicatio
     protected void configure(Bundle bundle) {
         super.configure(bundle);
         RadarConfiguration config = getConfig();
-        bundle.putLong(UPDATE_RATE_KEY, config.getLong(UPDATE_RATE, 300L));
-        this.getConfig().putExtras(bundle, RadarConfiguration.DEVICE_SERVICES_TO_CONNECT);
+        bundle.putLong(UPDATE_RATE_KEY, config.getLong(UPDATE_RATE, UPDATE_RATE_DEFAULT));
+        bundle.putString(NTP_SERVER_KEY, config.getString(NTP_SERVER_CONFIG, null));
     }
 
     @Override

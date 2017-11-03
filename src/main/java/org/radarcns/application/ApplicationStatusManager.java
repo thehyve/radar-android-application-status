@@ -27,10 +27,7 @@ import org.radarcns.android.device.DeviceStatusListener;
 import org.radarcns.android.kafka.ServerStatusListener;
 import org.radarcns.android.util.OfflineProcessor;
 import org.radarcns.kafka.ObservationKey;
-import org.radarcns.monitor.application.ApplicationRecordCounts;
-import org.radarcns.monitor.application.ApplicationServerStatus;
-import org.radarcns.monitor.application.ApplicationUptime;
-import org.radarcns.monitor.application.ServerStatus;
+import org.radarcns.monitor.application.*;
 import org.radarcns.topic.AvroTopic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +50,6 @@ public class ApplicationStatusManager
         extends AbstractDeviceManager<ApplicationStatusService, ApplicationState>
         implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(ApplicationStatusManager.class);
-    private static final long APPLICATION_UPDATE_INTERVAL_DEFAULT = 300_000L; // milliseconds
     private static final Long NUMBER_UNKNOWN = -1L;
     private static final int APPLICATION_PROCESSOR_REQUEST_CODE = 72553575;
     private static final String APPLICATION_PROCESSOR_REQUEST_NAME = ApplicationStatusManager.class.getName();
@@ -64,6 +60,9 @@ public class ApplicationStatusManager
 
     private final OfflineProcessor processor;
     private final long creationTimeStamp;
+    private final SntpClient sntpClient;
+    private String ntpServer;
+
     private InetAddress previousInetAddress;
 
     private final BroadcastReceiver serverStatusListener = new BroadcastReceiver() {
@@ -88,15 +87,18 @@ public class ApplicationStatusManager
         }
     };
 
-    public ApplicationStatusManager(ApplicationStatusService service) {
+    public ApplicationStatusManager(ApplicationStatusService service, String ntpServer, long updateRate) {
         super(service);
-
         serverTopic = createTopic("application_server_status", ApplicationServerStatus.class);
         recordCountsTopic = createTopic("application_record_counts", ApplicationRecordCounts.class);
         uptimeTopic = createTopic("application_uptime", ApplicationUptime.class);
+        ntpTopic = createTopic("application_external_time", ApplicationExternalTime.class);
+
+        sntpClient = new SntpClient();
+        setNtpServer(ntpServer);
 
         this.processor = new OfflineProcessor(service, this, APPLICATION_PROCESSOR_REQUEST_CODE,
-                APPLICATION_PROCESSOR_REQUEST_NAME, APPLICATION_UPDATE_INTERVAL_DEFAULT, false);
+                APPLICATION_PROCESSOR_REQUEST_NAME, updateRate, false);
 
         setName(getService().getApplicationContext().getApplicationInfo().processName);
 
@@ -120,6 +122,14 @@ public class ApplicationStatusManager
         updateStatus(DeviceStatusListener.Status.CONNECTED);
     }
 
+    public final synchronized void setNtpServer(String server) {
+        if (server == null || server.trim().isEmpty()) {
+            this.ntpServer = null;
+        } else {
+            this.ntpServer = server.trim();
+        }
+    }
+
     @Override
     public void run() {
         logger.info("Updating application status");
@@ -133,6 +143,10 @@ public class ApplicationStatusManager
                 return;
             }
             processRecordsSent();
+            if (processor.isDone()) {
+                return;
+            }
+            processReferenceTime();
         } catch (Exception e) {
             logger.error("Failed to update application status", e);
         }
@@ -140,6 +154,24 @@ public class ApplicationStatusManager
 
     public void setApplicationStatusUpdateRate(long period) {
         processor.setInterval(period);
+    }
+
+    public void processReferenceTime() {
+        String localServer;
+        synchronized (this) {
+            localServer = ntpServer;
+        }
+        if (localServer != null) {
+            if (sntpClient.requestTime(localServer, 5000)) {
+                double delay = sntpClient.getRoundTripTime() / 1000d;
+                double time = System.currentTimeMillis() / 1000d;
+                double ntpTime =  (sntpClient.getNtpTime() + SystemClock.elapsedRealtime()
+                        - sntpClient.getNtpTimeReference()) / 1000d;
+
+                send(ntpTimeTopic, new ApplicationExternalTime(time, time, ntpTime,
+                        localServer, ExternalTimeProtocol.SNTP, delay));
+            }
+        }
     }
 
     public void processServerStatus() {
