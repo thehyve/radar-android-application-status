@@ -25,34 +25,25 @@ import static org.radarcns.android.RadarConfiguration.SOURCE_ID_KEY;
 import static org.radarcns.application.ApplicationServiceProvider.NTP_SERVER_KEY;
 import static org.radarcns.application.ApplicationServiceProvider.UPDATE_RATE_KEY;
 
-public class ApplicationStatusService extends DeviceService {
-    private final ApplicationStatusTopics topics;
+public class ApplicationStatusService extends DeviceService<ApplicationState> {
     private String sourceId;
     private String ntpServer;
     private long updateRate;
-
-    public ApplicationStatusService() {
-        topics = ApplicationStatusTopics.getInstance();
-    }
 
     @Override
     protected DeviceManager createDeviceManager() {
         if (sourceId == null) {
             sourceId = RadarConfiguration.getOrSetUUID(getApplicationContext(), SOURCE_ID_KEY);
         }
-        return new ApplicationStatusManager(
-                this, getUserId(), sourceId, getDataHandler(), getTopics(),
-                ntpServer, updateRate);
+        ApplicationStatusManager manager = new ApplicationStatusManager(
+                this, ntpServer, updateRate);
+        manager.setApplicationStatusUpdateRate(updateRate);
+        return manager;
     }
 
     @Override
     protected ApplicationState getDefaultState() {
         return new ApplicationState();
-    }
-
-    @Override
-    protected ApplicationStatusTopics getTopics() {
-        return topics;
     }
 
     @Override

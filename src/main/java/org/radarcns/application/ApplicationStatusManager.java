@@ -20,17 +20,16 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.util.Pair;
-import org.radarcns.android.data.DataCache;
-import org.radarcns.android.data.TableDataHandler;
 import org.radarcns.android.device.AbstractDeviceManager;
 import org.radarcns.android.device.DeviceStatusListener;
 import org.radarcns.android.kafka.ServerStatusListener;
-import org.radarcns.key.MeasurementKey;
+import org.radarcns.android.util.OfflineProcessor;
+import org.radarcns.kafka.ObservationKey;
+import org.radarcns.monitor.application.*;
+import org.radarcns.topic.AvroTopic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +40,6 @@ import java.net.SocketException;
 import java.util.Enumeration;
 import java.util.Set;
 
-import static android.os.Process.THREAD_PRIORITY_BACKGROUND;
 import static org.radarcns.android.device.DeviceService.CACHE_RECORDS_SENT_NUMBER;
 import static org.radarcns.android.device.DeviceService.CACHE_RECORDS_UNSENT_NUMBER;
 import static org.radarcns.android.device.DeviceService.CACHE_TOPIC;
@@ -49,24 +47,26 @@ import static org.radarcns.android.device.DeviceService.SERVER_RECORDS_SENT_NUMB
 import static org.radarcns.android.device.DeviceService.SERVER_RECORDS_SENT_TOPIC;
 import static org.radarcns.android.device.DeviceService.SERVER_STATUS_CHANGED;
 
-public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationStatusService,
-        ApplicationState> implements Runnable {
+public class ApplicationStatusManager
+        extends AbstractDeviceManager<ApplicationStatusService, ApplicationState>
+        implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(ApplicationStatusManager.class);
     private static final Long NUMBER_UNKNOWN = -1L;
+    private static final int APPLICATION_PROCESSOR_REQUEST_CODE = 72553575;
+    private static final String APPLICATION_PROCESSOR_REQUEST_NAME = ApplicationStatusManager.class.getName();
 
-    private final DataCache<MeasurementKey, ApplicationServerStatus> serverStatusTable;
-    private final DataCache<MeasurementKey, ApplicationUptime> uptimeTable;
-    private final DataCache<MeasurementKey, ApplicationExternalTime> ntpTimeTable;
-    private final DataCache<MeasurementKey, ApplicationRecordCounts> recordCountsTable;
-    private final HandlerThread mHandlerThread;
+    private final AvroTopic<ObservationKey, ApplicationServerStatus> serverTopic;
+    private final AvroTopic<ObservationKey, ApplicationRecordCounts> recordCountsTopic;
+    private final AvroTopic<ObservationKey, ApplicationUptime> uptimeTopic;
+    private final AvroTopic<ObservationKey, ApplicationExternalTime> ntpTopic;
 
+    private final OfflineProcessor processor;
     private final long creationTimeStamp;
     private final SntpClient sntpClient;
+
     private String ntpServer;
 
     private InetAddress previousInetAddress;
-    private long updateRate;
-    private Handler mHandler;
 
     private final BroadcastReceiver serverStatusListener = new BroadcastReceiver() {
         @Override
@@ -90,34 +90,30 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
         }
     };
 
-    public ApplicationStatusManager(ApplicationStatusService applicationStatusService,
-                                    String userId, String sourceId, TableDataHandler dataHandler,
-                                    ApplicationStatusTopics topics, String ntpServer, long updateRate) {
-        super(applicationStatusService, new ApplicationState(), dataHandler, userId, sourceId);
-        this.serverStatusTable = dataHandler.getCache(topics.getServerTopic());
-        this.uptimeTable = dataHandler.getCache(topics.getUptimeTopic());
-        this.recordCountsTable = dataHandler.getCache(topics.getRecordCountsTopic());
-        this.ntpTimeTable = dataHandler.getCache(topics.getExternalTimeTopic());
+    public ApplicationStatusManager(ApplicationStatusService service, String ntpServer, long updateRate) {
+        super(service);
+        serverTopic = createTopic("application_server_status", ApplicationServerStatus.class);
+        recordCountsTopic = createTopic("application_record_counts", ApplicationRecordCounts.class);
+        uptimeTopic = createTopic("application_uptime", ApplicationUptime.class);
+        ntpTopic = createTopic("application_external_time", ApplicationExternalTime.class);
 
         sntpClient = new SntpClient();
         setNtpServer(ntpServer);
 
+        this.processor = new OfflineProcessor(service, this, APPLICATION_PROCESSOR_REQUEST_CODE,
+                APPLICATION_PROCESSOR_REQUEST_NAME, updateRate, false);
+
         setName(getService().getApplicationContext().getApplicationInfo().processName);
+
         creationTimeStamp = System.currentTimeMillis();
-
-        mHandlerThread = new HandlerThread("ApplicationStatus",
-                THREAD_PRIORITY_BACKGROUND);
-
         previousInetAddress = null;
-        this.updateRate = updateRate;
     }
 
     @Override
     public void start(@NonNull Set<String> acceptableIds) {
-        mHandlerThread.start();
-        synchronized (this) {
-            mHandler = new Handler(mHandlerThread.getLooper());
-        }
+        updateStatus(DeviceStatusListener.Status.READY);
+
+        this.processor.start();
 
         logger.info("Starting ApplicationStatusManager");
         IntentFilter filter = new IntentFilter();
@@ -126,19 +122,7 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
         filter.addAction(CACHE_TOPIC);
         getService().registerReceiver(serverStatusListener, filter);
 
-        schedule();
-
         updateStatus(DeviceStatusListener.Status.CONNECTED);
-    }
-
-    private synchronized void schedule() {
-        if (mHandler == null) {
-            return;
-        }
-
-        mHandler.removeCallbacks(this);
-        mHandler.postDelayed(this, updateRate / 3);
-        logger.info("App status updater: listener activated and set to a period of {}", updateRate);
     }
 
     public final synchronized void setNtpServer(String server) {
@@ -151,33 +135,28 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
 
     @Override
     public void run() {
-        synchronized (this) {
-            if (mHandler == null) {
-                return;
-            }
-        }
         logger.info("Updating application status");
         try {
             processServerStatus();
+            if (processor.isDone()) {
+                return;
+            }
             processUptime();
+            if (processor.isDone()) {
+                return;
+            }
             processRecordsSent();
+            if (processor.isDone()) {
+                return;
+            }
             processReferenceTime();
         } catch (Exception e) {
             logger.error("Failed to update application status", e);
         }
-        synchronized (this) {
-            if (mHandler != null) {
-                mHandler.postDelayed(this, updateRate);
-            }
-        }
     }
 
-    public final synchronized void setApplicationStatusUpdateRate(final long period) {
-        if (period == updateRate) {
-            return;
-        }
-        updateRate = period;
-        schedule();
+    public void setApplicationStatusUpdateRate(long period) {
+        processor.setInterval(period);
     }
 
     public void processReferenceTime() {
@@ -192,14 +171,14 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
                 double ntpTime =  (sntpClient.getNtpTime() + SystemClock.elapsedRealtime()
                         - sntpClient.getNtpTimeReference()) / 1000d;
 
-                send(ntpTimeTable, new ApplicationExternalTime(time, time, ntpTime,
+                send(ntpTopic, new ApplicationExternalTime(time, ntpTime,
                         localServer, ExternalTimeProtocol.SNTP, delay));
             }
         }
     }
 
     public void processServerStatus() {
-        double timeReceived = System.currentTimeMillis() / 1_000d;
+        double time = System.currentTimeMillis() / 1_000d;
 
         ServerStatus status;
         switch (getState().getServerStatus()) {
@@ -219,9 +198,9 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
         String ipAddress = getIpAddress();
         logger.info("Server Status: {}; Device IP: {}", status, ipAddress);
 
-        ApplicationServerStatus value = new ApplicationServerStatus(timeReceived, timeReceived, status, ipAddress);
+        ApplicationServerStatus value = new ApplicationServerStatus(time, status, ipAddress);
 
-        send(serverStatusTable, value);
+        send(serverTopic, value);
     }
 
     private String getIpAddress() {
@@ -252,13 +231,13 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
     }
 
     public void processUptime() {
-        double timeReceived = System.currentTimeMillis() / 1_000d;
+        double time = System.currentTimeMillis() / 1_000d;
         double uptime = (System.currentTimeMillis() - creationTimeStamp)/1000d;
-        send(uptimeTable, new ApplicationUptime(timeReceived, timeReceived, uptime));
+        send(uptimeTopic, new ApplicationUptime(time, uptime));
     }
 
     public void processRecordsSent() {
-        double timeReceived = System.currentTimeMillis() / 1_000d;
+        double time = System.currentTimeMillis() / 1_000d;
 
         int recordsCachedUnsent = 0;
         int recordsCachedSent = 0;
@@ -276,18 +255,20 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
 
         logger.info("Number of records: {sent: {}, unsent: {}, cached: {}}",
                 recordsSent, recordsCachedUnsent, recordsCached);
-        send(recordCountsTable, new ApplicationRecordCounts(timeReceived, timeReceived,
+        send(recordCountsTopic, new ApplicationRecordCounts(time,
                 recordsCached, recordsSent, recordsCachedUnsent));
     }
 
     @Override
     public void close() throws IOException {
         logger.info("Closing ApplicationStatusManager");
-        synchronized (this) {
-            mHandler = null;
-        }
-        mHandlerThread.quitSafely();
+        this.processor.close();
         getService().unregisterReceiver(serverStatusListener);
         super.close();
+    }
+
+    @Override
+    protected void registerDeviceAtReady() {
+        // custom registration
     }
 }
