@@ -266,9 +266,4 @@ public class ApplicationStatusManager
         getService().unregisterReceiver(serverStatusListener);
         super.close();
     }
-
-    @Override
-    protected void registerDeviceAtReady() {
-        // custom registration
-    }
 }
