@@ -62,6 +62,7 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
 
     private final long creationTimeStamp;
     private final SntpClient sntpClient;
+    private boolean sendIp;
     private String ntpServer;
 
     private InetAddress previousInetAddress;
@@ -92,7 +93,8 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
 
     public ApplicationStatusManager(ApplicationStatusService applicationStatusService,
                                     String userId, String sourceId, TableDataHandler dataHandler,
-                                    ApplicationStatusTopics topics, String ntpServer, long updateRate) {
+                                    ApplicationStatusTopics topics, String ntpServer, long updateRate,
+                                    boolean sendIp) {
         super(applicationStatusService, new ApplicationState(), dataHandler, userId, sourceId);
         this.serverStatusTable = dataHandler.getCache(topics.getServerTopic());
         this.uptimeTable = dataHandler.getCache(topics.getUptimeTopic());
@@ -110,6 +112,7 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
 
         previousInetAddress = null;
         this.updateRate = updateRate;
+        this.sendIp = sendIp;
     }
 
     @Override
@@ -216,7 +219,7 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
             default:
                 status = ServerStatus.UNKNOWN;
         }
-        String ipAddress = getIpAddress();
+        String ipAddress = sendIp ? getIpAddress() : null;
         logger.info("Server Status: {}; Device IP: {}", status, ipAddress);
 
         ApplicationServerStatus value = new ApplicationServerStatus(timeReceived, timeReceived, status, ipAddress);
@@ -289,5 +292,9 @@ public class ApplicationStatusManager extends AbstractDeviceManager<ApplicationS
         mHandlerThread.quitSafely();
         getService().unregisterReceiver(serverStatusListener);
         super.close();
+    }
+
+    public void setSendIp(boolean sendIp) {
+        this.sendIp = sendIp;
     }
 }
